@@ -23,7 +23,10 @@ pub struct Tokenizer {
 impl Tokenizer {
     pub fn new(path: &str) -> Tokenizer {
         let data: Vec<u8> = fs::read(path).expect("Error reading tokenizer file.");
+        Self::new_from_vec(data)
+    }
 
+    pub fn new_from_vec(data: Vec<u8>) -> Tokenizer {
         let vocab_size = slice_to_u32(&data[0..4]);
         //let max_token_len = slice_to_u32(&data[4..8]);
         let bos = slice_to_u32(&data[8..12]);
