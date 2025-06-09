@@ -36,23 +36,31 @@ impl Tokenizer {
         let sorted_vocab: Vec<TokenIndex> = vec![];
 
         let mut offset: usize = 16;
+        println!("Total data length: {}", data.len());
+        println!("Vocab size: {}", vocab_size);
 
-        for _ in 0..vocab_size {
+        for i in 0..vocab_size {
+            if offset + 4 > data.len() {
+                panic!("Out of bounds when reading score at offset {} for token {}", offset, i);
+            }
             let score = slice_to_f32(&data[offset..offset + 4]);
-
             vocab_scores.push(score);
-
             offset += 4;
 
+            if offset + 4 > data.len() {
+                panic!("Out of bounds when reading string length at offset {} for token {}", offset, i);
+            }
             let str_len = slice_to_u32(&data[offset..offset + 4]);
-
             offset += 4;
 
+            if offset + str_len as usize > data.len() {
+                panic!("Out of bounds when reading string at offset {} with length {} for token {}", offset, str_len, i);
+            }
             // Use lossy conversion to handle invalid UTF-8 sequences
             let token_str = String::from_utf8_lossy(&data[offset..offset + str_len as usize]).to_string();
+            println!("Token {}: length={}, offset={}, str={}", i, str_len, offset, token_str);
 
             vocab.push(token_str);
-
             offset += str_len as usize;
         }
 
