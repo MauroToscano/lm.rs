@@ -280,6 +280,102 @@ impl<'a> Transformer<'a> {
         }, offset)
     }
 
+    pub fn new_from_slice_for_quant(data: &'a [u8]) -> (Transformer<'a>, usize) {
+        assert_eq!(data[0..4], [0x6c, 0x6d, 0x72, 0x73], "Model not in lm.rs format.");
+
+        let lmrs_version = slice_to_u32(&data[4..8]);
+        println!("LMRS version: {}", lmrs_version);
+        
+        let (head, body, _) = unsafe { data[8..55].align_to::<TransformerArgs>() };
+        assert!(head.is_empty(), "Data was not aligned");
+        
+        let mut cfg = body[0];
+        assert!(cfg.q_type != QuantType::None, "This method only works with quantized models");
+
+        println!("Model type: {:?}\n", cfg.model_type);
+        println!("Using {:?} quantization.", cfg.q_type);
+
+        let head_size = cfg.head_size;
+        let mut offset: usize = 256;
+        
+        // For now this will do so we don't run out of memory
+        if cfg.seq_len > 8192 {
+            cfg.seq_len = 8192;
+        }
+
+        let kv_dim = cfg.head_size * cfg.n_kv_heads;
+
+        let mut rms_pre_ffn = None;
+        let mut rms_post_ffn = None;
+        let mut lm_head = None;
+
+        println!("Loading weights...");
+
+        let token_embedding_quant = init_param_quant(data, &mut offset, 1, cfg.vocab_size * cfg.dim, cfg.group_size, cfg.q_type);
+
+        let mut emb_tab: Vec<f32> = vec![0.0; (cfg.vocab_size * cfg.dim) as usize];
+        dequantize(&token_embedding_quant.as_quantized()[0], &mut emb_tab, (cfg.vocab_size * cfg.dim) as usize, cfg.group_size, cfg.q_type);
+
+        let rms_att = init_param(data, &mut offset, cfg.n_layers, cfg.dim);
+        let wq = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.n_heads * head_size, cfg.group_size, cfg.q_type);
+        let wk = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.n_kv_heads * head_size, cfg.group_size, cfg.q_type);
+        let wv = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.n_kv_heads * head_size, cfg.group_size, cfg.q_type);
+        let wo = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.n_heads * head_size, cfg.group_size, cfg.q_type);
+        let rms_post_att = init_param(data, &mut offset, cfg.n_layers, cfg.dim);
+
+        if cfg.model_type == ModelType::GEMMA {
+            rms_pre_ffn = Some(init_param(data, &mut offset, cfg.n_layers, cfg.dim));
+        }
+
+        let w1 = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.hidden_dim, cfg.group_size, cfg.q_type);
+        let w2 = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.hidden_dim, cfg.group_size, cfg.q_type);
+        let w3 = init_param_quant(data, &mut offset, cfg.n_layers, cfg.dim * cfg.hidden_dim, cfg.group_size, cfg.q_type);
+
+        if cfg.model_type == ModelType::GEMMA {
+            rms_post_ffn = Some(init_param(data, &mut offset, cfg.n_layers, cfg.dim));
+        }
+
+        let rms_final = init_param(data, &mut offset, 1, cfg.dim); 
+        
+        if cfg.model_type == ModelType::PHI {
+            lm_head = Some(init_param_quant(data, &mut offset, 1, cfg.dim * cfg.vocab_size, cfg.group_size, cfg.q_type));
+        }
+        
+        let weights = TransformerWeights {
+            token_embedding: Tensor::FloatVec(emb_tab),
+            token_embedding_quant: Some(token_embedding_quant),
+            wq,
+            wk,
+            wv,
+            wo,
+            w_rms_att: rms_att,
+            w1,
+            w2,
+            w3,
+            w_rms_post_att: rms_post_att,
+            w_rms_pre_ffn: rms_pre_ffn,
+            w_rms_post_ffn: rms_post_ffn,
+            w_rms_final: rms_final,
+            lm_head,
+        };
+
+        let state = TransformerState {
+            xb: vec![0.0; cfg.dim as usize],
+            xq: Some(MutableQuantizedTensor { q: vec![0; (cfg.dim) as usize], s: vec![0.0; (cfg.dim) as usize]}),
+            key_cache: vec![0.0; (cfg.n_layers * cfg.seq_len * kv_dim) as usize],
+            value_cache: vec![0.0; (cfg.n_layers * cfg.seq_len * kv_dim) as usize],
+            logits: vec![0.0; cfg.vocab_size as usize],
+        };
+        
+        println!("Done.\n");
+        
+        (Transformer {
+            args: cfg,
+            weights,
+            state,
+        }, offset)
+    }
+
     pub fn forward(&mut self, token: u32, pos: u32) -> &mut [f32] {
         let p = self.args;
         let x = &mut vec![0.0; (p.dim) as usize];
