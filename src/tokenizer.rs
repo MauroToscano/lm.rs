@@ -21,14 +21,14 @@ pub struct Tokenizer {
 }
 
 impl Tokenizer {
+
     pub fn new(path: &str) -> Tokenizer {
-        let data: Vec<u8> = fs::read(path).expect("Error reading tokenizer file.");
-        Self::new_from_slice(&data)
+        let data = fs::read(path).expect("Error reading tokenizer file.");
+        Tokenizer::from_bytes(&data)
     }
 
-    pub fn new_from_slice(data: &[u8]) -> Tokenizer {
+    pub fn from_bytes(data: &[u8]) -> Tokenizer {
         let vocab_size = slice_to_u32(&data[0..4]);
-        //let max_token_len = slice_to_u32(&data[4..8]);
         let bos = slice_to_u32(&data[8..12]);
         let eos = slice_to_u32(&data[12..16]);
         let mut vocab: Vec<String> = vec![];
@@ -36,37 +36,23 @@ impl Tokenizer {
         let sorted_vocab: Vec<TokenIndex> = vec![];
 
         let mut offset: usize = 16;
-        println!("Total data length: {}", data.len());
-        println!("Vocab size: {}", vocab_size);
 
-        for i in 0..vocab_size {
-            if offset + 4 > data.len() {
-                panic!("Out of bounds when reading score at offset {} for token {}", offset, i);
-            }
+        for _ in 0..vocab_size {
             let score = slice_to_f32(&data[offset..offset + 4]);
             vocab_scores.push(score);
             offset += 4;
 
-            if offset + 4 > data.len() {
-                panic!("Out of bounds when reading string length at offset {} for token {}", offset, i);
-            }
             let str_len = slice_to_u32(&data[offset..offset + 4]);
             offset += 4;
 
-            if offset + str_len as usize > data.len() {
-                panic!("Out of bounds when reading string at offset {} with length {} for token {}", offset, str_len, i);
-            }
-            // Use lossy conversion to handle invalid UTF-8 sequences
-            let token_str = String::from_utf8_lossy(&data[offset..offset + str_len as usize]).to_string();
-            println!("Token {}: length={}, offset={}, str={}", i, str_len, offset, token_str);
-
+            let token_str = String::from_utf8(data[offset..offset + str_len as usize].to_vec())
+                .expect("Error reading token string");
             vocab.push(token_str);
             offset += str_len as usize;
         }
 
         Tokenizer {
             vocab_size,
-            //max_token_len,
             vocab,
             bos,
             eos,
@@ -74,7 +60,7 @@ impl Tokenizer {
             sorted_vocab,
         }
     }
-
+    
     pub fn encode(&mut self, text: &str, bos: bool, eos: bool, chat_format: bool, model_type: ModelType) -> Vec<u32> {
         assert!(!text.is_empty(), "Text to encode should not be empty");
 
