@@ -48,7 +48,8 @@ impl Tokenizer {
 
             offset += 4;
 
-            let token_str = String::from_utf8(data[offset..offset + str_len as usize].to_vec()).expect("Error reading token string");
+            // Use lossy conversion to handle invalid UTF-8 sequences
+            let token_str = String::from_utf8_lossy(&data[offset..offset + str_len as usize]).to_string();
 
             vocab.push(token_str);
 
