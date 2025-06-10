@@ -1,3 +1,7 @@
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 use lmrs::transformer::ModelType;
 use lmrs::transformer::Transformer;
 use lmrs::tokenizer::Tokenizer;
@@ -39,7 +43,12 @@ struct Args {
     num_crops: u32,
 }
 
+
+
 fn main() {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     let logo = r#"
     L      M     M  RRRR    ssss
     L      MM   MM  R   R  s

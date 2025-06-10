@@ -44,22 +44,16 @@ impl Tokenizer {
 
         for i in 0..vocab_size {
             let score = slice_to_f32(&data[offset..offset + 4]);
-            println!("Token {} - Score: {}", i, score);
             vocab_scores.push(score);
             offset += 4;
-            println!("Offset after score: {}", offset);
 
             let str_len = slice_to_u32(&data[offset..offset + 4]);
-            println!("Token {} - String length: {}", i, str_len);
             offset += 4;
-            println!("Offset after str_len: {}", offset);
 
             let token_str = String::from_utf8(data[offset..offset + str_len as usize].to_vec())
                 .expect("Error reading token string");
-            println!("Token {} - String: {}", i, token_str);
             vocab.push(token_str);
             offset += str_len as usize;
-            println!("Offset after string: {}", offset);
         }
 
         Tokenizer {

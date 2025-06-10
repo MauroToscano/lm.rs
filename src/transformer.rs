@@ -21,7 +21,7 @@ pub fn init_param<'a>(data: &'a [u8], offset: &mut usize, n: u32, size_each: u32
 }
 
 pub fn init_param_quant<'a>(data: &'a [u8], offset: &mut usize, n: u32, size_each: u32, gs: u32, q_type: QuantType) -> Tensor<'a> {
-    let mut res: Vec<QuantizedTensor> = Vec::with_capacity(n as usize);
+    let mut res: Vec<QuantizedTensor> = Vec::with_capacity((n / 2) as usize);
     let groups = (size_each / gs) as usize;
     let mut size = size_each;
     
@@ -515,7 +515,7 @@ impl<'a> Transformer<'a> {
                         let factor = 32.0;
                         let low_freq_factor = 1.0;
                         let high_freq_factor = 4.0;
-                        let old_context_len = 8192.0;
+                        let old_context_len = 1024.0;
 
                         let low_freq_wavelen = old_context_len / low_freq_factor;
                         let high_freq_wavelen = old_context_len / high_freq_factor;

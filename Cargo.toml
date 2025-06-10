@@ -11,6 +11,8 @@ backend-multimodal = ["dep:base64", "dep:image"]
 multimodal = ["dep:image"]
 
 [dependencies]
+dhat = "0.3"
+
 wide = "0.7.28"
 memmap2 = "0.9.4"
 rayon = "1.10.0"
