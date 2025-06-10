@@ -15,7 +15,6 @@ dhat = "0.3"
 
 wide = "0.7.28"
 memmap2 = "0.9.4"
-rayon = "1.10.0"
 chrono = "0.4.38"
 clap = { version = "4.5.13", features = ["derive"] }
 

@@ -1,8 +1,6 @@
-
 use crate::quantization::{QuantizedTensor, MutableQuantizedTensor};
 
 use std::{convert::TryInto};
-use rayon::prelude::*;
 use wide::{f32x8, i32x8};
 
 // Some helper functions 
@@ -142,10 +140,10 @@ pub fn softmax(x: &mut [f32]){
 pub fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, o: usize) {
     let n_simd = n / 8;
 
-    xout.par_chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
+    xout.chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
         let xi = j*n;
 
-        elem.par_chunks_exact_mut(4).enumerate().for_each(|(i, xout_elem)| {
+        elem.chunks_exact_mut(4).enumerate().for_each(|(i, xout_elem)| {
             let new_i = i*4;
             let ni0: usize = new_i * n;
             let ni1: usize = (new_i + 1) * n;
@@ -173,10 +171,10 @@ pub fn matmul(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, o: usize) {
 pub fn matmul_q8(xout: &mut [f32], x: &MutableQuantizedTensor, w: &QuantizedTensor, n: usize, o: usize, gs: usize) {
     let n_simd = gs / 8;
     
-    xout.par_chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
+    xout.chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
         let xi = j*n;
 
-        elem.par_chunks_exact_mut(4).enumerate().for_each(|(i, xout_elem)| { 
+        elem.chunks_exact_mut(4).enumerate().for_each(|(i, xout_elem)| { 
             let new_i = i*4;
             let ni0: usize = new_i * n;
             let ni1: usize = (new_i + 1) * n;
@@ -220,10 +218,10 @@ pub fn matmul_q4(xout: &mut [f32], x: &MutableQuantizedTensor, w: &QuantizedTens
     let mask_a = i32x8::new([0x0F; 8]);
     let mask_b = i32x8::new([0xF0; 8]);
     
-    xout.par_chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
+    xout.chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
         let xi = j*n;
         
-        elem.par_iter_mut().enumerate().for_each(|(i, xout_elem)| {
+        elem.iter_mut().enumerate().for_each(|(i, xout_elem)| {
             let ni: usize = i * n / 2;
 
             *xout_elem = (0..=(n/2 - group_size)).step_by(group_size).map(|j| {
@@ -254,10 +252,10 @@ pub fn matmul_rest(xout: &mut [f32], x: &[f32], w: &[f32], n: usize, o: usize) {
     
     let rest = n_simd * 8;
 
-    xout.par_chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
+    xout.chunks_exact_mut(o).enumerate().for_each(|(j, elem)| {
         let xi = j*n;
 
-        elem.par_iter_mut().enumerate().for_each(|(i, val)| {
+        elem.iter_mut().enumerate().for_each(|(i, val)| {
             let mut sum = f32x8::ZERO;
             let mut final_sum: f32 = 0.0;
             let w_slice = &w[i * n..i * n + n];

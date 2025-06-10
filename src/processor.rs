@@ -5,7 +5,6 @@ use crate::functional::{matmul, matmul_q8, matmul_q4, concat};
 use image::imageops::resize;
 use image::{ImageBuffer, Rgb};
 use wide::f32x8;
-use rayon::prelude::*;
 
 fn transpose_img(image: &[u8], width: u32, height: u32) -> Vec<u8> {
     let mut transposed_image = Vec::new();
@@ -249,7 +248,7 @@ impl<'a> PHI3VProcessor<'a> {
         let mut out_features = vec![0.0; out_shape as usize];
 
         // Img projection mlp with GELU activation
-        out_features.par_chunks_mut(p.text_dim as usize).enumerate().for_each( |(h, xb)| {
+        for h in 0..p.text_dim as usize {
             let mut hidden_emb = vec![0.0; p.text_dim as usize];
 
             if !quantized {
@@ -291,18 +290,18 @@ impl<'a> PHI3VProcessor<'a> {
             }
             
             if !quantized {
-                matmul(xb, &hidden_emb, &w.img_projection1.as_float(), p.text_dim as usize, p.text_dim as usize);
+                matmul(&out_features[h*p.text_dim as usize..(h+1)*p.text_dim as usize], &hidden_emb, &w.img_projection1.as_float(), p.text_dim as usize, p.text_dim as usize);
             } else {
                 let mut sxq = MutableQuantizedTensor { q: vec![0; (p.text_dim) as usize], s: vec![0.0; p.text_dim as usize]};
 
                 if p.q_type == QuantType::Q8_0 {
                     quantize(&mut sxq, &hidden_emb, p.text_dim as usize, p.group_size);
                     
-                    matmul_q8(xb, &sxq, &w.img_projection1.as_quantized()[0], p.text_dim as usize, p.text_dim as usize, p.group_size as usize);
+                    matmul_q8(&out_features[h*p.text_dim as usize..(h+1)*p.text_dim as usize], &sxq, &w.img_projection1.as_quantized()[0], p.text_dim as usize, p.text_dim as usize, p.group_size as usize);
                 } else if p.q_type == QuantType::Q4_0 {
                     quantize_q4(&mut sxq, &hidden_emb, p.text_dim as usize, p.group_size);
                     
-                    matmul_q4(xb, &sxq, &w.img_projection1.as_quantized()[0], p.text_dim as usize, p.text_dim as usize, p.group_size as usize);
+                    matmul_q4(&out_features[h*p.text_dim as usize..(h+1)*p.text_dim as usize], &sxq, &w.img_projection1.as_quantized()[0], p.text_dim as usize, p.text_dim as usize, p.group_size as usize);
                 }
             }
 
@@ -311,17 +310,17 @@ impl<'a> PHI3VProcessor<'a> {
             for k in 0..n_simd {
                 let w2_bias_vec = f32x8::from(&w.img_projection1_bias.as_float()[(k*8) as usize..(k*8+8) as usize]);
 
-                let mut x2_vec = f32x8::from(&xb[(k*8) as usize..(k*8+8) as usize]);
+                let mut x2_vec = f32x8::from(&out_features[h*p.text_dim as usize..(h+1)*p.text_dim as usize]);
 
                 x2_vec += w2_bias_vec;
                 
                 let x2 = x2_vec.to_array();
 
                 for j in 0..8 {
-                    xb[(k*8 + j) as usize] = x2[j as usize];
+                    out_features[h*p.text_dim as usize + j] = x2[j as usize];
                 }
             }
-        });
+        }
 
         out_features
     }

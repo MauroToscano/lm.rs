@@ -9,7 +9,6 @@ use crate::functional::softmax;
 use crate::quantization::*;
 
 use memmap2::Mmap;
-use rayon::prelude::*;
 use std::mem::size_of;
 
 pub fn init_param<'a>(data: &'a [u8], offset: &mut usize, n: u32, size_each: u32) -> Tensor<'a> {
@@ -467,7 +466,7 @@ impl<'a> Transformer<'a> {
         let mut hidden_embeddings = vec![0.0; total_shape_hidden];
         let mut temp_hidden_embeddings = vec![0.0; total_shape_hidden];
 
-        embeddings.par_chunks_mut(dim as usize).enumerate().for_each( |(i, xb)| {
+        embeddings.chunks_mut(dim as usize).enumerate().for_each( |(i, xb)| {
             rmsnorm(xb, &x[i*dim as usize..i*dim as usize + dim as usize], &w.w_rms_att.as_float()[(l*dim) as usize..(l*dim + dim) as usize], dim as usize, p.rms_norm_eps, p.model_type == ModelType::GEMMA);
         });
         
@@ -500,7 +499,7 @@ impl<'a> Transformer<'a> {
         }
          
         // RoPE
-        k.par_chunks_mut(kv_dim as usize).zip(sq.par_chunks_mut(att_dim as usize)).enumerate().for_each( |(idx, (tk, tq))| {
+        k.chunks_mut(kv_dim as usize).zip(sq.chunks_mut(att_dim as usize)).enumerate().for_each( |(idx, (tk, tq))| {
             for i in 0..p.n_heads {
                 for j in 0..(head_size/2) {
                     let head_dim: u32 = j * 2;
@@ -558,8 +557,8 @@ impl<'a> Transformer<'a> {
             embeddings.extend(vec![0.0; ((att_dim - dim)*sl) as usize]);
         }
         
-        embeddings.par_chunks_exact_mut(att_dim as usize).enumerate().for_each( |(i, elem)| {
-            elem.par_chunks_mut(head_size as usize).enumerate().for_each( |(h, xb)| {
+        embeddings.chunks_exact_mut(att_dim as usize).enumerate().for_each( |(i, elem)| {
+            elem.chunks_mut(head_size as usize).enumerate().for_each( |(h, xb)| {
                 let q = &sq[(i as u32 * att_dim + h as u32 * head_size) as usize..(i as u32 * att_dim + h as u32 * head_size + head_size) as usize];
 
                 let att = &mut vec![0.0; p.seq_len as usize];
@@ -617,7 +616,7 @@ impl<'a> Transformer<'a> {
             }
         }
         
-        x.par_chunks_exact_mut(dim as usize).zip(embeddings.par_chunks_exact_mut(dim as usize)).zip(temp_embeddings.par_chunks_exact(dim as usize)).for_each( |((xelem, emb), temb)| {
+        x.chunks_exact_mut(dim as usize).zip(embeddings.chunks_exact_mut(dim as usize)).zip(temp_embeddings.chunks_exact(dim as usize)).for_each( |((xelem, emb), temb)| {
             if p.model_type == ModelType::GEMMA {
                 rmsnorm(emb, temb, &w.w_rms_post_att.as_float()[(l*dim) as usize..(l*dim + dim) as usize], dim as usize, p.rms_norm_eps, p.model_type == ModelType::GEMMA);
             
@@ -658,7 +657,7 @@ impl<'a> Transformer<'a> {
             }
         }
 
-        hidden_embeddings.par_chunks_exact_mut(hidden_dim as usize).zip(temp_hidden_embeddings.par_chunks_exact(hidden_dim as usize)).for_each( |(hb, hb2)| {
+        hidden_embeddings.chunks_exact_mut(hidden_dim as usize).zip(temp_hidden_embeddings.chunks_exact(hidden_dim as usize)).for_each( |(hb, hb2)| {
             for i in 0..hidden_dim {
                 let mut val = hb[i as usize];
 
@@ -691,7 +690,7 @@ impl<'a> Transformer<'a> {
             }
         }
 
-        x.par_chunks_exact_mut(dim as usize).zip(embeddings.par_chunks_exact(dim as usize)).zip(temp_embeddings.par_chunks_exact_mut(dim as usize)).for_each(| ((xelem, emb), temb) | {
+        x.chunks_exact_mut(dim as usize).zip(embeddings.chunks_exact(dim as usize)).zip(temp_embeddings.chunks_exact_mut(dim as usize)).for_each(| ((xelem, emb), temb) | {
             if p.model_type == ModelType::GEMMA {
                 rmsnorm(temb, emb, &w.w_rms_post_ffn.as_ref().unwrap().as_float()[(l*dim) as usize..(l*dim + dim) as usize], dim as usize, p.rms_norm_eps, true);
                 

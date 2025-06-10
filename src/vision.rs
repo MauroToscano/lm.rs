@@ -2,7 +2,6 @@ use crate::quantization::{Tensor, MutableQuantizedTensor, QuantType, quantize, q
 use crate::transformer::{init_param, init_param_quant};
 use crate::functional::{matmul, matmul_rest, matmul_q8, matmul_q4, concat, layernorm, softmax};
 
-use rayon::prelude::*;
 use wide::f32x8;
 
 #[repr(C, packed)]
